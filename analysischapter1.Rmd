@@ -1,0 +1,1031 @@
+---
+title: "paper1_analysis"
+author: "Andrea Noche"
+date: "2024-10-16"
+output: html_document
+---
+
+# Loading required libraries
+
+```{r}
+library(phyloseq)
+library(ggplot2)
+library(pals) # palettes
+library(forcats) # organizing samples in the plot
+library(openxlsx) # open and creates excel files
+library(vegan)
+library(tidyr)
+library(dplyr)
+library(pals)
+library(ggpubr)
+library(fantaxtic)
+library(ggnested)
+```
+
+# Re-arrenging the datasets
+
+```{r}
+# ASVs dataset with data from 2021
+d21 <- otu[1:46,]
+odd <- otu[66,]
+d21 <- rbind(d21,odd)
+# factors and sample names from 2021
+d21names <- alpha_diversity[1:46,]
+oddn <- alpha_diversity[66,]
+d21names <- rbind(d21names,oddn)
+
+# ASVs dataset with data from 2022
+d22 <- otu[47:65,]
+d22b <- otu[67:71,]
+d22 <- rbind(d22,d22b)
+# factors and sample names from 2022
+d22names <- alpha_diversity[47:65,]
+d22namesb <- alpha_diversity[67:71,]
+d22names <- rbind(d22names,d22namesb)
+
+# cleaning up a bit
+rm(odd,oddn,d22b,d22namesb)
+
+write.xlsx(protists,"D:/dannevig/datafiles/protists.xlsx")
+
+```
+
+### Loading the environmental data
+
+```{r}
+env<-alpha_diversity[11:17]
+envsz<-as.data.frame(scale(env))
+
+```
+
+```{r}
+otun15<-as.data.frame(otu_table(protists_n15))
+
+```
+
+#Filtering singletons
+
+```{r}
+
+# First, calculate the total abundance of each ASV across the entire dataset
+asv_total_abundances <- trophic %>%
+  group_by(OTU) %>%
+  summarise(total_abundance = sum(Abundance, na.rm = TRUE), .groups = "drop")
+
+# Filter ASVs that have total abundance > 1
+asvs_to_keep <- asv_total_abundances %>%
+  filter(total_abundance > 1) %>%
+  pull(OTU)
+
+# Now filter the original table to keep only those ASVs
+trophic_filtered <- trophic %>%
+  filter(OTU %in% asvs_to_keep)
+
+write.xlsx(trophic_filtered,"D:/dannevig/datafiles/trophic_filtered.xlsx")
+
+trophic_df <- trophic_filtered %>%
+  group_by(OTU) %>%
+  summarise(total_abundance = sum(Abundance, na.rm = TRUE), .groups = "drop") %>%
+  mutate(percent = 100*total_abundance / sum(total_abundance, na.rm = TRUE)) %>%
+  ungroup()
+
+
+```
+
+# Palettes
+
+```{r}
+palette1=c("#6DA34D","#12355B","#8DA7BE","#EB5160","#DE9E36")
+
+
+paletteall=c("#332288","#6699CC","#88CCEE","#44AA99","#117733","#999933","#DDCC77",
+ "#C18748","#AF4E24","#661100","#B40F20","#AA4499")
+
+```
+
+# Cluster
+
+```{r}
+# this otu corresponds with the taxa table, with the ASVs and the relative abundances
+d.euc<-dist(as.matrix(otun15),'euclidean') 
+
+d.hc<-hclust(d.euc,"ave")
+
+library(ggdendro)
+
+dend<-plot(d.hc,labels = alpha_diversity$Sample,
+     hang = -1,
+     cex = 0.6,          # Adjusts the size of the dendrogram labels
+     cex.axis = 0.6,     # Adjusts the size of the axis tick labels
+     cex.lab = 0.6,      # Adjusts the size of axis labels (if any)
+     main = ""           # Removes the title
+)
+
+ggdendrogram(d.hc)
+     
+
+jpeg("C:/users/andre/Desktop/plotspaper/cluster.jpeg",
+     width = 1800,
+     height = 1500,
+     res = 400)
+
+
+ggdendrogram(d.hc,
+             cex=0.4,
+             cex.lab=0.2)
+     
+
+dev.off()
+
+```
+
+#summarizing data
+
+```{r}
+ntaxa(rare) #number ASVs
+
+sum(sample_sums(rare)) #number of reads in the dataset
+```
+
+# Alpha diversity
+
+## Estimate richness of the dataset
+
+```{r}
+
+alpha <- estimate_richness(rare) #Calculates all the indexes for alpha diversity 
+
+samdf<-sample_data(rare)
+alpha <- cbind(alpha,samdf)
+
+alpha$sample<-rownames(alpha)
+
+alpha <- write.xlsx(alpha,"D:/dannevig/datafiles/alphadiversity.xlsx" ) #Saving the alpha diversity calculations as an excel file
+
+
+```
+
+## Plot the diversity
+
+```{r}
+
+alpha$year[alpha$year=="1"]<-"2021"
+alpha$year[alpha$year=="2"]<-"2022"
+
+alpha$srange<-as.character(alpha$station)
+
+alpha$srange[alpha$srange=="FL1"]<-1
+alpha$srange[alpha$srange=="FL2"]<-2
+alpha$srange[alpha$srange=="FL3"]<-3
+alpha$srange[alpha$srange=="FL4"]<-4
+alpha$srange[alpha$srange=="FL5"]<-5
+alpha$srange[alpha$srange=="FL6"]<-6
+alpha$srange[alpha$srange=="O1"]<-7
+alpha$srange[alpha$srange=="O2"]<-8
+alpha$srange[alpha$srange=="O3"]<-9
+alpha$srange[alpha$srange=="K1"]<-12
+alpha$srange[alpha$srange=="K2"]<-11
+alpha$srange[alpha$srange=="K3"]<-10
+
+alpha$srange<-as.numeric(alpha$srange)
+
+alpha$drange<-as.character(alpha$depth) 
+
+alpha$drange[alpha$drange=="0m"]<-1
+alpha$drange[alpha$drange=="5m"]<-2
+alpha$drange[alpha$drange=="15m"]<-3
+alpha$drange[alpha$drange=="Deep"]<-4
+
+alpha$drange<-as.numeric(alpha$drange)
+
+alpha$year<-as.factor(alpha$year)
+
+
+s<-ggplot(alpha, aes(x=fct_reorder(station,srange),
+                            y=Shannon,
+                            shape=year,
+                            color=year))+
+  geom_point(size=3)+
+  ylab("Shannon Index")+
+  ylim(0,5)+
+  theme(axis.text.x = element_text(size=14, angle = 90, hjust=1),
+        axis.text.y = element_text(size=14, hjust=1),
+        axis.title = element_text(size=16,face="bold"), 
+        axis.title.x = element_blank(),
+        legend.title = element_blank(),
+        legend.position = c(0.9,0.05)
+  )+
+  facet_grid(rows=vars(fct_reorder(depth,drange)))
+s
+
+r<-ggplot(alpha, aes(x=fct_reorder(station,srange),
+                            y=Observed,
+                            shape=year,
+                            color=year))+
+  geom_point(size=3)+
+  ylab("Richness")+
+  ylim(0,400)+
+  theme(axis.text.x = element_text(size=14, angle = 90, hjust=1),
+        axis.text.y = element_text(size=14, hjust=1),
+        axis.title = element_text(size=16,face="bold"), 
+        axis.title.x = element_blank(),
+        legend.position = "none",
+        legend.title = element_blank()
+  )+
+  facet_grid(rows=vars(fct_reorder(depth,drange)))
+r
+
+e<-ggplot(alpha, aes(x=fct_reorder(station,srange),
+                            y=Pielou,
+                            shape=year))+
+  geom_point(size=3)+
+  ylab("Pielou Index")+
+  theme(axis.text.x = element_text(size=11, angle = 90, hjust=1),
+        axis.title = element_text(size=10,face="bold"), 
+        axis.title.x = element_blank(),
+        legend.position = c(0.9,0.1)
+  )+
+  ylim(0,1)+
+  facet_grid(rows=vars(fct_reorder(depth,drange)))
+e
+
+jpeg("D:/plotspaper/alphadiver_v4.jpeg",units="mm", 
+     width=400, height=210,res=500)
+ggarrange(r,s,
+          #labels=c(),
+          legend=NULL,
+          #common.legend = TRUE,legend = "right",
+          ncol=2, nrow=1)
+dev.off()     
+
+jpeg("D:/plotspaper/evenness.jpeg",units="mm", 
+     width=400, height=210,res=500)
+e
+dev.off()   
+             
+```
+
+## Top taxa
+
+```{r}
+# Agglomerate taxa at genus level
+GP.genus<-tax_glom(protists_ps, taxrank = "Genus")
+
+#Converting character into factors so we can do the classification
+sample_data(GP.genus)$samplename <- as.factor(sample_data(GP.genus)$samplename)
+sample_data(GP.genus)$year <- as.factor(sample_data(GP.genus)$year)
+sample_data(GP.genus)$station <- as.factor(sample_data(GP.genus)$station)
+sample_data(GP.genus)$depth <- as.factor(sample_data(GP.genus)$depth)
+
+# Top N taxa
+n<-40
+genus.top<-names(sort(taxa_sums(GP.genus),decreasing = TRUE))[1:n]
+
+# Calculate relative abundance
+genus.top.abund<-transform_sample_counts(GP.genus,function(x)x/sum(x))
+
+# Subset object to top N taxa
+genus_ps<-prune_taxa(genus.top,genus.top.abund)
+
+#Converting character into factors so we can do the classification
+sample_data(genus_ps)$samplename <- as.factor(sample_data(genus_ps)$samplename)
+sample_data(genus_ps)$year <- as.factor(sample_data(genus_ps)$year)
+sample_data(genus_ps)$station <- as.factor(sample_data(genus_ps)$station)
+sample_data(genus_ps)$depth <- as.factor(sample_data(genus_ps)$depth)
+
+genus<-psmelt(genus_ps)
+genus
+
+```
+
+```{r}
+genus.df <- psmelt(ps_genusP)
+head(genus.df)
+names(myphyla.df)  # to choose factors you want to use to navigate
+
+MySummary <- alveolata2 %>%
+  group_by(Class) %>%
+  summarize(mean_abund = mean(Abundance, na.rm=TRUE))
+head(MySummary)
+
+as.data.frame(table(tax_table(alveolata)[,"Class"]))
+
+top_phyla <- df %>%
+    group_by(Class) %>%
+    summarize(Mean = mean(Abundance)) %>%
+    arrange(-Mean)
+
+FSr  = transform_sample_counts(protists_ps, function(x) x / sum(x) )
+
+FSfr = filter_taxa(FSr, function(x) sum(x) >0.1, TRUE)
+
+FSfr_df<-psmelt(FSfr)
+```
+
+```{r}
+
+GP.species<-tax_glom(rare, "Species")
+
+#Converting character into factors so we can do the classification
+sample_data(GP.species)$Sample <- as.factor(sample_data(GP.species)$Sample)
+sample_data(GP.species)$year <- as.factor(sample_data(GP.species)$year)
+sample_data(GP.species)$station <- as.factor(sample_data(GP.species)$station)
+sample_data(GP.species)$depth <- as.factor(sample_data(GP.species)$depth)
+
+# Top N taxa
+n<-15
+species.top<-names(sort(taxa_sums(GP.species),decreasing = TRUE))[1:n]
+
+# Calculate relative abundance
+species.top.abund<-transform_sample_counts(GP.species,function(x)x/sum(x))
+
+df<-psmelt(species.top.abund)
+
+# Subset object to top N taxa
+species_ps<-prune_taxa(species.top,species.top.abund)
+
+#Converting character into factors so we can do the classification
+sample_data(species_ps)$samplename <- as.factor(sample_data(species_ps)$samplename)
+sample_data(species_ps)$year <- as.factor(sample_data(species_ps)$year)
+sample_data(species_ps)$station <- as.factor(sample_data(species_ps)$station)
+sample_data(species_ps)$depth <- as.factor(sample_data(species_ps)$depth)
+
+species<-psmelt(species_ps)
+species
+
+# Merges ASVs that have the same taxonomy rank (Genus)
+gp = tax_glom(GlobalPatterns, taxrank = "Genus")
+
+# Define group/condition type
+type = levels(sample_data(GP.species)$year)[1] # Feces
+
+# Retrieve sample name of the defined type
+sn = sample_names(sample_data(GP.species)[sample_data(GP.species)$year == type,])
+
+# Calculate taxa sum of the selected samples
+top5 = head(sort(rowSums(otu_table(species.top.abund)[sn])/length(sn), decreasing = TRUE), 5)
+
+top5 = cbind(as.data.frame(tax_table(species.top.abund)[names(top5),]), Count = top5)
+
+nested_top_taxa<-nested_top_taxa(
+  rare,
+  top_tax_level="Class",
+  nested_tax_level="Species",
+  n_top_taxa = 10,
+  n_nested_taxa = 1,
+  top_merged_label = "Other",
+  nested_merged_label = "Other <tax>",
+  by_proportion = T,
+  grouping =c("station","depth","year")
+)
+
+top_level <- "Class"
+nested_level <- "Species"
+top_merged_label <- "Other"
+nested_merged_label <- "Other"
+#sample_order <- "station"
+nested_top_taxa <- nested_top_taxa(rare,
+                       top_tax_level = top_level,
+                       nested_tax_level = nested_level,
+                       n_top_taxa = 5,
+                       n_nested_taxa = 5)
+
+plot_nested_bar(top10, top_level, nested_level,
+                asv_as_id = T)+
+   facet_grid(depth~year, scale = "free")
+
+top <- top_taxa(rare, n_taxa = 20)
+
+p <- plot_nested_bar(top$ps_obj,
+                     "Division",
+                     "Species",
+                     asv_as_id = T)+
+  facet_grid(depth~year, scale = "free")
+
+p
+
+```
+
+```{r}
+plot_heatmap(genus_ps,"samplename",taxa.label = "Genus",
+             taxa.order="Class", sample.order="year",
+             low="#66CCFF", high="#000033", na.value="white")
+
+plot_heatmap(species_ps,"samplename",taxa.label = "Species",
+             taxa.order="Class", sample.order="year",
+             low="#66CCFF", high="#000033")
+
+```
+
+# Barplots
+
+## Division
+
+```{r}
+# get abundance as a percentage
+GP.protists <- transform_sample_counts(rare, function(x) x / sum(x) * 100)
+
+trophic.clean<-subset(trophic,Division!="Ancyromonadida")
+trophic.clean<-subset(trophic.clean,Division!="Apusomonada")
+trophic.clean<-subset(trophic.clean,Division!="Centroplasthelida")
+trophic.clean<-subset(trophic.clean,Division!="Discoba")
+trophic.clean<-subset(trophic.clean,Division!="Discosea")
+trophic.clean<-subset(trophic.clean,Division!="Evosea")
+trophic.clean<-subset(trophic.clean,Division!="Metamonada")
+trophic.clean<-subset(trophic.clean,Division!="Rigifilida")
+
+trophic.division <- trophic.clean %>%
+  #mutate(trophicstrategy = as.factor(trophicstrategy)) %>%
+  group_by(Sample, Division,station,srange,depth,drange,year) %>%
+  summarise(total_abundance = sum(Abundance, na.rm = TRUE), .groups = "drop") %>%
+  group_by(Sample) %>%
+  mutate(percent = 1 * total_abundance / sum(total_abundance, na.rm = TRUE)) %>%
+  ungroup()
+
+p<-ggplot(data = trophic.division, 
+       aes(x=fct_reorder(station,srange),
+           y =percent, 
+           fill = Division)) + 
+  geom_bar(stat = "identity", position = "stack") + 
+  ylab("Relative abundance (%)")+
+  #ylim(0,470)+
+  scale_color_brewer(palette="Paired")+
+  scale_fill_brewer(palette="Paired")+
+  theme(strip.text.x = element_text(size=6),
+        strip.text.y = element_text(size=6),
+        axis.text.x = element_text(size=6,angle=90),
+        axis.text.y = element_text(size=6),
+        axis.title = element_text(size=6),
+        axis.title.x = element_blank(),
+        legend.position = "right",
+        legend.key.size = unit(0.3, "cm"),
+        legend.text = element_text(size=8),
+        legend.title = element_text(size=8,"Phylum"))+
+  labs(fill="Phylum")+
+  facet_grid(fct_reorder(depth,drange) ~ year)
+p
+
+
+jpeg("D:/plotspaper/rabund_division5.jpeg",
+     width = 2200,
+     height = 1200,
+     res = 400)
+p
+dev.off()
+
+```
+
+```{r}
+alveolata <- subset_taxa(protists_ps, Division=="Alveolata")
+
+# get abundance as a percentage
+GP.alveolata <- transform_sample_counts(alveolata, function(x) x / sum(x) * 100)
+
+p<-ggplot(data=trophic_filtered, aes(x="station",fill="Division",color="Division"))+
+  geom_bar(aes(y="Abundance"),stat="identity",position="stack")+
+  #scale_fill_manual(values=stepped2(20))+
+  #scale_colour_manual(values=stepped2(20))+
+  theme(strip.text.x = element_text(size=6),
+        strip.text.y = element_text(size=6),
+        axis.text.x = element_text(size=6),
+        axis.text.y = element_text(size=6),
+        axis.title = element_text(size=8),
+        axis.title.x = element_blank(),
+        legend.position = "right",
+        legend.key.size = unit(0.3, "cm"),
+        legend.text = element_text(size=6),
+        legend.title = element_text(size=6))+
+  facet_grid(depth~year)
+p
+
+# Since the most abundant group is Dinoflagellates 
+
+dinoflagellata <- subset_taxa(alveolata, Subdivision=="Dinoflagellata")
+# get abundance as a percentage
+GP.dinoflagellata <- transform_sample_counts(dinoflagellata, function(x) x / sum(x) * 100)
+
+jpeg("D:/plotspaper/species_byclass.jpeg",
+     width = 2200,
+     height = 1200,
+     res = 400)
+plot_nested_bar(ps_obj = species_ps,
+                top_level = "Class",
+                nested_level = "Species")+
+  facet_grid(depth~year,scales="free")
+dev.off()
+
+
+top20_asvs <- trophic_filtered %>%
+  group_by(OTU) %>%
+  summarise(total_abundance = sum(Abundance, na.rm = TRUE)) %>%
+  arrange(desc(total_abundance)) %>%
+  slice_head(n = 20) %>%
+  pull(OTU)
+
+# filter dataset to only top 20
+trophic_top20 <- trophic_filtered %>%
+  filter(OTU %in% top20_asvs)
+
+ggnested::ggnested(trophic_top20, 
+         aes(x= fct_reorder(station,srange),
+             y= Abundance,
+             main_group = "Class", 
+             sub_group = "OTU",
+             legend_labeling = "join"
+         #main_keys = F
+         ))+
+  geom_bar(stat="identity",position="fill")+
+  #scale_fill_manual(values=stepped2(20))+
+  #scale_color_manual(values=stepped2(20))+
+  xlab(NULL)+
+  ylab("Relative abundance(%)")+
+  facet_grid(fct_reorder(depth,drange)~year)
+
+
+######## Per sample ###########
+
+trophic_top20_per_sample <- trophic_filtered %>%
+  group_by(station, depth, year) %>%   # define sample
+  slice_max(order_by = Abundance, n = 20, with_ties = FALSE) %>% 
+  ungroup()
+
+ggnested::ggnested(trophic_top20_per_sample, 
+         aes(x = fct_reorder(station, srange),
+             y = Abundance,
+             main_group = "Class", 
+             sub_group = "Species")) +
+  geom_bar(aes(color = Species),
+           stat = "identity", position = "fill") +
+  xlab(NULL) +
+  ylab("Relative abundance") +
+  facet_grid(fct_reorder(depth, drange) ~ year) +
+  theme(legend.position = "none")
+  
+
+jpeg("D:/plotspaper/top7.jpeg",
+     width=2000, height=1400,res=500)
+trophic_top20 <- trophic_filtered %>%
+  filter(OTU %in% top20_asvs)
+
+ggnested::ggnested(trophic_top20, 
+         aes(x= fct_reorder(station,srange),
+             y= Abundance,
+             main_group = "Class", 
+             sub_group = "OTU",
+             #legend_labeling = "join"
+         #main_keys = F
+         ))+
+  geom_bar(stat="identity",position="fill")+
+  #scale_fill_manual(values=stepped2(20))+
+  #scale_color_manual(values=stepped2(20))+
+  xlab(NULL)+
+  ylab("Relative abundance(%)")+
+  facet_grid(fct_reorder(depth,drange)~year)+
+   theme(legend.position = "none")
+
+  
+dev.off()
+        
+```
+
+## Freshwater
+
+```{r}
+freshw<-subset(trophic,Genus=="Chlamydomonas"|Genus=="Oophila"|Genus=="Chloromonas"|
+                        Genus=="Dinobryon"|Genus=="Mallomonas"|Genus=="Fragilaria"|
+                        Genus=="Stigeoclonium"|Genus=="Scenedesmus"|Genus=="Neochloris"|
+                        Genus=="Aphanomyces"|Genus=="Apoikia"|Genus=="Apoikiospumella"|
+                        Genus=="Apoikiaceae_X"|Genus=="Synura"|
+                        Genus=="Paraphysomonas"|Genus=="Chromulinospumella"|
+                        Genus=="Fibrophrys"|Class=="Xanthophyceae"|
+                        Genus=="Ochromonadales_XX"|Order=="Chromulinales"|
+                        Order=="Ochromonadales"|Class=="Chrysophyceae")
+
+          
+#calculate percentages of strategy per sample
+freshw_df <- freshw %>%
+  #mutate(trophicstrategy = as.factor(trophicstrategy)) %>%
+  group_by(Sample,OTU, Species,station,srange,depth,drange,year) %>%
+  summarise(total_abundance = sum(Abundance, na.rm = TRUE), .groups = "drop") %>%
+  filter(total_abundance >= 10) %>%   # <-- Filter step added here
+  group_by(Sample) %>%
+  mutate(percent = 100 * total_abundance / sum(total_abundance, na.rm = TRUE)) %>%
+  ungroup()
+
+freshw_df$percent <- freshw_df$percent / 100  # <- Scale values from 0–100 to 0–1
+
+plot_nested_bar(freshw_ps,
+                top_level = "Species",
+                nested_level = "Genus"
+               # sample_order = sample_order
+               )
+
+
+p<-ggplot(data = freshw_df, 
+       aes(x=fct_reorder(station,srange),
+           y = percent, 
+           fill = Species)) + 
+  geom_bar(stat = "identity", position = "stack") + 
+  #scale_fill_manual(values=c('#669900','#D55E00','#661100','#AA4499','#6699CC'))+
+  #scale_fill_manual(values=c('#669900','#7B2D26','#19535f',','#d8dbe2'))+
+  #scale_fill_manual(values=c('#669900','#7B2D26','#19535f','#0B7A75','#DDBDD5'))+
+  #scale_fill_manual(values=c('#669900','#CC0000','#FF9900','#009DDC','#393D3F'))+
+  ylab("Relative abundance (%)")+
+  #ylim(0,470)+
+  #scale_y_continuous(labels = scales::percent)+
+  theme(strip.text.x = element_text(size=6),
+        strip.text.y = element_text(size=6),
+        axis.text.x = element_text(size=6,angle=90),
+        axis.text.y = element_text(size=6),
+        axis.title = element_text(size=6),
+        axis.title.x = element_blank(),
+        legend.position = "right",
+        legend.key.size = unit(0.3, "cm"),
+        legend.text = element_text(size=8),
+        legend.title = element_text(size=8,"Trophic strategy"))+
+  labs(fill="Freshwater species")+
+  facet_grid(fct_reorder(depth,drange) ~ year)
+p
+
+jpeg("D:/plotspaper/freshwater_speciesv4.jpeg",
+     width = 2000,
+     height = 1200,
+     res = 400)
+p
+dev.off()
+        
+```
+
+## Trophic strategy
+
+```{r}
+
+trophic<-read.xlsx("D:/dannevig/datafiles/dannevigtraits2025.xlsx")
+
+p<-plot_bar(GP.protists, x="station",fill="Division")+
+  geom_bar(aes(x=fct_reorder(station,srange),
+               fill=Division,
+               color=Division),
+           stat="identity",position="stack")+
+  scale_fill_manual(values=stepped2(20))+
+  scale_colour_manual(values=stepped2(20))+
+  ylab("Relative abundance")+
+  theme(strip.text.x = element_text(size=6),
+        strip.text.y = element_text(size=6),
+        axis.text.x = element_text(size=6),
+        axis.text.y = element_text(size=6),
+        axis.title = element_text(size=6),
+        axis.title.x = element_blank(),
+        legend.position = "right",
+        legend.key.size = unit(0.3, "cm"),
+        legend.text = element_text(size=6),
+        legend.title = element_text(size=6))+
+  guides(fill=guide_legend(ncol=2))+
+  facet_grid(fct_reorder(depth,drange)~year)
+p
+
+
+#calculate percentages of strategy per sample
+trophic_df <- trophic %>%
+  mutate(trophicstrategy = as.factor(trophicstrategy)) %>%
+  group_by(Sample, trophicstrategy,station,srange,depth,drange,year) %>%
+  summarise(total_abundance = sum(Abundance, na.rm = TRUE), .groups = "drop") %>%
+  group_by(Sample) %>%
+  mutate(percent = 100 * total_abundance / sum(total_abundance, na.rm = TRUE)) %>%
+  ungroup()
+
+palettetroph=c('#117733','#661100','#6699CC','#D55E00','#AA4499')
+
+trophic_df$percent <- trophic_df$percent / 100  # <- Scale values from 0–100 to 0–1
+
+p<-ggplot(data = trophic_df, 
+       aes(x=fct_reorder(station,srange),
+           y = percent, 
+           fill = trophicstrategy)) + 
+  geom_bar(stat = "identity", position = "stack") + 
+  #scale_fill_manual(values=c('#669900','#D55E00','#661100','#AA4499','#6699CC'))+
+  #scale_fill_manual(values=c('#669900','#7B2D26','#19535f',','#d8dbe2'))+
+  #scale_fill_manual(values=c('#669900','#7B2D26','#19535f','#0B7A75','#DDBDD5'))+
+  scale_fill_manual(values=c('#669900','#CC0000','#FF9900','#009DDC','#393D3F'))+
+  ylab("Relative abundance (%)")+
+  #scale_y_continuous(labels = scales::percent)+
+  theme(strip.text.x = element_text(size=6),
+        strip.text.y = element_text(size=6),
+        axis.text.x = element_text(size=6,angle=90),
+        axis.text.y = element_text(size=6),
+        axis.title = element_text(size=6),
+        axis.title.x = element_blank(),
+        legend.position = "right",
+        legend.key.size = unit(0.3, "cm"),
+        legend.text = element_text(size=6),
+        legend.title = element_text(size=6,"Trophic strategy"))+
+  labs(fill="Trohic strategy")+
+  facet_grid(fct_reorder(depth,drange) ~ year)
+p
+
+jpeg("D:/plotspaper/trophicv4.jpeg",
+     width = 2200,
+     height = 1400,
+     res = 400)
+p
+dev.off()
+
+```
+
+# Alpha diversity
+
+### chla vs shannon
+
+```{r}
+kruskal.test(Shannon~chla,data = alpha_diversity)
+
+kruskal.test(Shannon~fluo,data = alpha_diversity)
+
+```
+
+```{r}
+model<-lme4::lmer(Shannon~temp+sal+fluo,data=alpha_diversity)
+
+model_anova<-aov(model)
+summary(model_anova)
+
+tukey.test<-TukeyHSD(model_anova)
+```
+
+# Eveness
+
+```{r}
+Pielou <-as.data.frame((alpha$Shannon / log(alpha$Observed)))
+alpha<-cbind(alpha,Pielou)
+rm(Pielou)
+
+alpha$Pielou<-alpha$`(alpha$Shannon/log(alpha$Observed))`
+```
+
+```{r}
+alpha$year<-as.numeric(alpha$year)
+alpha$station<-as.character(alpha$station)
+alpha$depth<-as.character(alpha$depth)
+
+lm<-lme4::lme
+r(Shannon~depth+station+(1|year),data=alpha)
+plot(lm)
+summary(lm)
+model_anova2<-aov(lm)
+summary(model_anova2)
+
+tukey<-TukeyHSD(model_anova2)
+tukey
+summary(tukey)
+plot(tukey)
+
+lm<-lm(Observed~depth+station+(1|year),data=alpha)
+plot(lm)
+summary(lm)
+model_anova2<-aov(lm)
+summary(model_anova2)
+
+tukey<-TukeyHSD(model_anova2)
+tukey
+plot(tukey)
+```
+
+```{r}
+rda.all<-dbrda(d21~.,env21s,dust="bray")
+rda.all
+
+plot(rda.all)
+
+```
+
+```{r}
+envf21<- subset(env21d,station!="Topdalsfjorden")
+envf21<- subset(envf21,station!="Byfjorden")
+envf21<- subset(envf21,station!="Oksøy fyr")
+envf21<- subset(envf21,station!="Springen")
+envf21<- subset(envf21,station!="Oddhausen")
+envf21<- subset(envf21,station!="Mannefjorden")
+
+write.xlsx(otu,"D:/dannevig/datafiles/ASVstable.xlsx")
+```
+
+# NMDS
+
+```{r}
+
+rare.nmds<-subset_samples(rare,depth!="15m")
+
+otu.rare<-as.data.frame(otu_table(rare.nmds))
+
+dannevig.bc <- vegdist(otu.rare,'bray')
+
+GP.ord <- ordinate(rare.nmds, "NMDS", "bray")
+p1 = plot_ordination(rare.nmds, GP.ord, type="taxa", color="station",shape="depht")
+print(p1)
+
+dannevig.bc.15 <- vegdist(otu.rare,'bray')    #Create Bray-Curtis matrix
+dannevig.mds <- metaMDS(dannevig.bc.15,k=2,autotransform=FALSE) 
+stressplot(dannevig.mds, main="Shepard plot")
+dannevig.mds
+
+envn15<-read.xlsx("D:/dannevig/datafiles/env_n15.xlsx")
+envn15.b<-envn15[8:14]
+envn15.b[is.na(envn15.b)]<-0
+envn15.s<-as.data.frame(scale(envn15.b)) #scale the parameters
+fit2 <- envfit(dannevig.mds, env15.s)
+
+env[is.na(env)]<-0
+env.s<-as.data.frame(scale(env)) #scale the parameters
+fit <- envfit(dannevig.mds, env.s)
+#run the following three lines together
+ordiplot(dannevig.mds$points,display="sites",type="n")
+points(dannevig.mds$points,pch=as.character(dannevig$depth))#plotting sites in function of depth
+plot(fit1)
+
+plot(dannevig.mds)
+plot(fit2)
+
+data.scores = as.data.frame(scores(dannevig.mds))
+data.scores$station = as.factor(envn15$station)
+data.scores$depth = as.factor(envn15$depth)
+data.scores$year = as.factor(envn15$year)
+data.scores$sample = as.factor(envn15$sample)
+data.scores$srange =envn15$srange
+
+
+# Define the color palette for 12 stations
+palette_stations <- c("#332288", "#6699CC", "#88CCEE", "#44AA99", "#117733", "#999933", 
+                      "#DDCC77", "#C18748", "#AF4E24","#830B17", "#E21227","#F47B87")
+
+palette_stations_fill <- c("#332288", "#6699CC", "#88CCEE", "#44AA99", "#117733", "#999933", 
+                           "#F47B87","#E21227","#830B17","#DDCC77", "#C18748", "#AF4E24")#goes in alphabetical order to assign the colors
+
+# Add a new column for conditional fill
+data.scores$fill_color <- ifelse(data.scores$year == "2021",
+                                 palette_stations_fill[data.scores$station],  # Use station colors for 2021
+                                 NA)  # No fill for 2022
+
+
+# Define shape mappings for 3 depths
+shapes_depth <- c(21, 22, 23)  # Choose shapes that support fill
+shapes_depth <- c(19,16,17)  # Choose shapes that support fill
+
+# Plot with conditional fill and other aesthetics
+
+data.scores.n15<-subset(data.scores,depth!="15m")
+
+gg <- ggplot(data = data.scores.n15, aes(x = NMDS1, y = NMDS2,
+                                     shape=year,
+                                     color=depth)
+                                    ) +
+   #geom_jitter(
+   # aes(
+   #   color =fct_reorder(station,srange), # Color by station (12 unique values)
+    #  shape = depth,           # Shape by depth (3 unique values)
+   #   fill = fill_color# Conditional fill color based on year
+   # ),
+  #  size = 2, alpha = 0.7
+  #) +
+  geom_point(size=1)+
+  #stat_ellipse(aes(group = year, color=year), type = "t", linetype = "dashed", size = 0.5) +
+  geom_text(data=data.scores.n15,aes(x=NMDS1,y=NMDS2,label=station),
+            alpha=0.5,color="black",size=2,vjust=0,hjust=0)+
+  #scale_colour_manual(values =palette_stations) +  # Set custom colors for stations
+ # scale_shape_manual(values = shapes_depth) +       # Set shapes for depths
+  #scale_fill_identity(guide = "none") +             # Directly use fill_color values, no separate legend
+  guides(
+    color = guide_legend(title = "Depth",override.aes = list(size = 1)),
+    shape = guide_legend(title = "Year",override.aes = list(size = 1))
+      ) +
+  theme(
+    axis.title = element_text(size = 8, face = "bold", colour = "grey30"),
+    panel.background = element_blank(),
+    panel.border = element_rect(fill = NA, colour = "grey30"),
+    legend.title = element_text(size = 6, face = "bold", colour = "grey30"),
+    legend.text = element_text(size = 6, colour = "grey30"),
+    legend.key.size = unit(0.6,"line")
+  )
+
+
+# Print the plot
+gg
+
+plot(dispersion, hull = FALSE, ellipse=TRUE,label = T,
+     col = c("darkorchid1",  "brown1", "orange","green"))
+        #col=c("#332288","#6699CC","#88CCEE","#44AA99","#117733","#999933","#DDCC77","#C18748","#AF4E24","#661100","#B40F20","#AA4499"))
+legend("right",title="Depth",
+       c("0m","15m","90m"),
+       #c("Jan","Feb","March","Apr","May","June","July","August","Sept","Oct","Nov","Dec"),
+       #fill =c("#332288","#6699CC","#88CCEE","#44AA99","#117733","#999933","#DDCC77","#C18748","#AF4E24","#661100","#B40F20","#AA4499"),
+       fill=c("darkorchid1",  "brown1", "orange","green"),
+       horiz=FALSE, cex=.9)
+
+jpeg("D:/plotspaper/nmds10.jpeg",
+     width = 2400,
+     height = 1400,
+     res = 500)
+gg
+dev.off()
+
+```
+
+# PERMANOVA
+
+```{r}
+# All dataset
+otu<-otu_table(rare)
+
+otu.df<-as.data.frame(otu)
+
+dannevig.bc <- vegdist(otu,'bray')
+#distance was already calculated for the NMDs and it just need to get converted into matrix
+dannevig.bc.data<-as.matrix(dannevig.bc)
+
+env<-read.xlsx("D:/dannevig/datafiles/env.xlsx")
+
+env.s<-as.data.frame(scale(env[7:13]))
+
+env <- env %>%
+  mutate(
+    station_num = as.numeric(gsub("srange", "", srange)),
+    transect = case_when(
+      station_num %in% 1:6  ~ "Farsund-Lyngdal",
+      station_num %in% 7:9  ~ "Outer",
+      station_num %in% 10:12 ~ "Kristiansand",
+      TRUE ~ NA_character_
+    )
+  )
+
+cor(env.s)
+
+protists.permanova <- adonis2(dannevig.bc~transect*station*depth*year,data=env,permutations=10000)
+
+print(protists.permanova)   
+
+```
+
+## By years
+
+```{r}
+otu21<-otu[1:45,]
+otuodd<-otu[66,]
+otu21<-rbind(otu21,otuodd)
+
+dannevig.bc.21 <- vegdist(otu21,'bray')  #distance calculation
+
+dannevig.bc.data21<-as.matrix(dannevig.bc.21) #into matrix
+
+env21<-env21d[1:45,]
+env47<-env21d[47,]
+env21<-rbind(env21,env47)
+rm(env47)
+env21<-env21[,8:13]
+
+env21.s<-as.data.frame(scale(env21))
+
+protists21.permanova <- adonis2(dannevig.bc.21~.,data=env21.s,permutations=999)
+print(protists21.permanova) 
+
+
+```
+
+# dbrda
+
+```{r}
+mod <- dbrda(otu ~ temp + sal + par + dens +fluo , data = env, distance = "bray")
+anova(mod)         # test significance
+anova(mod, by="term")  # test each environmental factor
+plot(mod)
+
+# Extract site scores (sample positions)
+sites <- scores(mod, display = "sites") %>% as.data.frame()
+sites$depth <- env$depth   # categorical depth variable in your env data
+sites$year  <- env$year
+sites$station <- env$station
+# Extract biplot (environmental vectors)
+species <- scores(mod, display = "bp") %>% as.data.frame()
+
+jpeg("D:/plotspaper/dbrda3.jpeg",
+     width = 2400,
+     height = 1600,
+     res = 400)
+
+ggplot() +
+  geom_point(data = sites, aes(x = dbRDA1, y = dbRDA2, shape = depth, label=station), size = 1) +
+  stat_ellipse(data = sites, aes(x = dbRDA1, y = dbRDA2, fill = year), 
+               geom="polygon", alpha=0.3,level = 0.95) +
+  geom_segment(data = species,
+               aes(x = 0, y = 0, xend = dbRDA1, yend = dbRDA2),
+               arrow = arrow(length = unit(0.3,"cm"),type="closed"), color = "#730000") +
+  geom_text(data = species,
+            aes(x = dbRDA1, y = dbRDA2, label = rownames(species)),
+            vjust = -0.8, size = 4,color = "#730000" ) +
+  geom_text(data = sites,
+                  aes(x = dbRDA1, y = dbRDA2, label = station),
+                  vjust= -0.5,size = 2, show.legend = FALSE) +
+  theme_minimal() +
+  labs(x = paste0("db-RDA1 (", round(mod$CCA$eig[1] / sum(mod$CCA$eig) * 100, 2), "%)"),
+       y = paste0("db-RDA2 (", round(mod$CCA$eig[2] / sum(mod$CCA$eig) * 100, 2), "%)"))
+dev.off()
+
+```
