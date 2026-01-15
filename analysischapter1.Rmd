@@ -13,7 +13,7 @@ library(ggplot2)
 library(pals) # palettes
 library(forcats) # organizing samples in the plot
 library(openxlsx) # open and creates excel files
-library(vegan)
+library(vegan) 
 library(tidyr)
 library(dplyr)
 library(pals)
@@ -22,7 +22,7 @@ library(fantaxtic)
 library(ggnested)
 ```
 
-# Re-arrenging the datasets
+# Getting data ready
 
 ```{r}
 # ASVs dataset with data from 2021
@@ -149,31 +149,54 @@ sum(sample_sums(rare)) #number of reads in the dataset
 
 # Alpha diversity
 
-## Estimate richness of the dataset
+## Calculate alpha diversity indexes
+
+This is a function incorporated on the phyloseq library, and it provides calculations for "Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher".
 
 ```{r}
 
-alpha <- estimate_richness(rare) #Calculates all the indexes for alpha diversity 
+alpha <- estimate_richness(rare) # CHANGE ME  
 
+#Extract sample information 
 samdf<-sample_data(rare)
-alpha <- cbind(alpha,samdf)
 
+#Bind the sample information with the alpha diversity indexes
+alpha <- cbind(alpha,samdf)
 alpha$sample<-rownames(alpha)
 
-alpha <- write.xlsx(alpha,"D:/dannevig/datafiles/alphadiversity.xlsx" ) #Saving the alpha diversity calculations as an excel file
-
-
+#Saves the alpha diversity calculations as an excel file
+alpha <- write.xlsx(alpha,"D:/dannevig/datafiles/alphadiversity.xlsx" ) #CHANGE directory
 ```
+## Calculate Pielou's index (evenness)
+J': Pielou's index
+H': Shannon-Weaver diversity index
+S: richness
+
+J'= H' / log(S)
+```{r}
+#Calculate the index apart
+pielou <-as.data.frame((alpha$Shannon / log(alpha$Observed)))
+
+alpha<-cbind(alpha,pielou)
+rm(pielou)
+
+#Rename column
+alpha$Pielou<-alpha$`(alpha$Shannon/log(alpha$Observed))
+```
+
 
 ## Plot the diversity
 
+Give a range to the different factors' levels
+
+When plotting, R shows the samples in an alphabetical/numerical order. Sometimes this is not the way you want to show your data, so this chunk allows to reorganize the samples by indicating a determinate order.
+
 ```{r}
 
-alpha$year[alpha$year=="1"]<-"2021"
-alpha$year[alpha$year=="2"]<-"2022"
-
+#Create column with the factor you want to convert
 alpha$srange<-as.character(alpha$station)
 
+#Change the factor level for a value in function of the order you want to plot in
 alpha$srange[alpha$srange=="FL1"]<-1
 alpha$srange[alpha$srange=="FL2"]<-2
 alpha$srange[alpha$srange=="FL3"]<-3
@@ -187,8 +210,10 @@ alpha$srange[alpha$srange=="K1"]<-12
 alpha$srange[alpha$srange=="K2"]<-11
 alpha$srange[alpha$srange=="K3"]<-10
 
+#Convert in numeric
 alpha$srange<-as.numeric(alpha$srange)
 
+#Repit with the rest of factors
 alpha$drange<-as.character(alpha$depth) 
 
 alpha$drange[alpha$drange=="0m"]<-1
@@ -201,6 +226,30 @@ alpha$drange<-as.numeric(alpha$drange)
 alpha$year<-as.factor(alpha$year)
 
 
+
+
+
+
+
+jpeg("D:/plotspaper/alphadiver_v4.jpeg",units="mm", 
+     width=400, height=210,res=500)
+ggarrange(r,s,
+          #labels=c(),
+          legend=NULL,
+          #common.legend = TRUE,legend = "right",
+          ncol=2, nrow=1)
+dev.off()     
+
+jpeg("D:/plotspaper/evenness.jpeg",units="mm", 
+     width=400, height=210,res=500)
+e
+dev.off()   
+            
+```
+
+fct_reorder() forcer the plot to show in the order indicated
+```{r}
+#Shannon
 s<-ggplot(alpha, aes(x=fct_reorder(station,srange),
                             y=Shannon,
                             shape=year,
@@ -217,7 +266,10 @@ s<-ggplot(alpha, aes(x=fct_reorder(station,srange),
   )+
   facet_grid(rows=vars(fct_reorder(depth,drange)))
 s
+```
 
+```{r}
+#Richness
 r<-ggplot(alpha, aes(x=fct_reorder(station,srange),
                             y=Observed,
                             shape=year,
@@ -234,7 +286,10 @@ r<-ggplot(alpha, aes(x=fct_reorder(station,srange),
   )+
   facet_grid(rows=vars(fct_reorder(depth,drange)))
 r
+```
 
+```{r}
+#Pielou index 
 e<-ggplot(alpha, aes(x=fct_reorder(station,srange),
                             y=Pielou,
                             shape=year))+
@@ -248,21 +303,45 @@ e<-ggplot(alpha, aes(x=fct_reorder(station,srange),
   ylim(0,1)+
   facet_grid(rows=vars(fct_reorder(depth,drange)))
 e
+```
 
-jpeg("D:/plotspaper/alphadiver_v4.jpeg",units="mm", 
-     width=400, height=210,res=500)
-ggarrange(r,s,
-          #labels=c(),
-          legend=NULL,
-          #common.legend = TRUE,legend = "right",
-          ncol=2, nrow=1)
-dev.off()     
+## Model alpha diversity
 
-jpeg("D:/plotspaper/evenness.jpeg",units="mm", 
-     width=400, height=210,res=500)
-e
-dev.off()   
-             
+```{r}
+model<-lme4::lmer(Shannon~temp+sal+fluo,data=alpha_diversity)
+
+model_anova<-aov(model)
+summary(model_anova)
+
+tukey.test<-TukeyHSD(model_anova)
+```
+
+```{r}
+alpha$year<-as.numeric(alpha$year)
+alpha$station<-as.character(alpha$station)
+alpha$depth<-as.character(alpha$depth)
+
+lm<-lme4::lme
+r(Shannon~depth+station+(1|year),data=alpha)
+plot(lm)
+summary(lm)
+model_anova2<-aov(lm)
+summary(model_anova2)
+
+tukey<-TukeyHSD(model_anova2)
+tukey
+summary(tukey)
+plot(tukey)
+
+lm<-lm(Observed~depth+station+(1|year),data=alpha)
+plot(lm)
+summary(lm)
+model_anova2<-aov(lm)
+summary(model_anova2)
+
+tukey<-TukeyHSD(model_anova2)
+tukey
+plot(tukey)
 ```
 
 ## Top taxa
@@ -732,63 +811,6 @@ dev.off()
 
 ```
 
-# Alpha diversity
-
-### chla vs shannon
-
-```{r}
-kruskal.test(Shannon~chla,data = alpha_diversity)
-
-kruskal.test(Shannon~fluo,data = alpha_diversity)
-
-```
-
-```{r}
-model<-lme4::lmer(Shannon~temp+sal+fluo,data=alpha_diversity)
-
-model_anova<-aov(model)
-summary(model_anova)
-
-tukey.test<-TukeyHSD(model_anova)
-```
-
-# Eveness
-
-```{r}
-Pielou <-as.data.frame((alpha$Shannon / log(alpha$Observed)))
-alpha<-cbind(alpha,Pielou)
-rm(Pielou)
-
-alpha$Pielou<-alpha$`(alpha$Shannon/log(alpha$Observed))`
-```
-
-```{r}
-alpha$year<-as.numeric(alpha$year)
-alpha$station<-as.character(alpha$station)
-alpha$depth<-as.character(alpha$depth)
-
-lm<-lme4::lme
-r(Shannon~depth+station+(1|year),data=alpha)
-plot(lm)
-summary(lm)
-model_anova2<-aov(lm)
-summary(model_anova2)
-
-tukey<-TukeyHSD(model_anova2)
-tukey
-summary(tukey)
-plot(tukey)
-
-lm<-lm(Observed~depth+station+(1|year),data=alpha)
-plot(lm)
-summary(lm)
-model_anova2<-aov(lm)
-summary(model_anova2)
-
-tukey<-TukeyHSD(model_anova2)
-tukey
-plot(tukey)
-```
 
 ```{r}
 rda.all<-dbrda(d21~.,env21s,dust="bray")
