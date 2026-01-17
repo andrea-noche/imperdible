@@ -101,6 +101,13 @@ palette1=c("#6DA34D","#12355B","#8DA7BE","#EB5160","#DE9E36")
 paletteall=c("#332288","#6699CC","#88CCEE","#44AA99","#117733","#999933","#DDCC77",
  "#C18748","#AF4E24","#661100","#B40F20","#AA4499")
 
+# Define the color palette for 12 stations
+palette_stations <- c("#332288", "#6699CC", "#88CCEE", "#44AA99", "#117733", "#999933", 
+                      "#DDCC77", "#C18748", "#AF4E24","#830B17", "#E21227","#F47B87")
+
+palette_stations_fill <- c("#332288", "#6699CC", "#88CCEE", "#44AA99", "#117733", "#999933", 
+                           "#F47B87","#E21227","#830B17","#DDCC77", "#C18748", "#AF4E24")#goes in alphabetical order to assign the colors
+
 ```
 
 # Cluster
@@ -834,7 +841,7 @@ write.xlsx(otu,"D:/dannevig/datafiles/ASVstable.xlsx")
 # NMDS
 
 ```{r}
-
+# Because I only had samples for 15m for 2021, I decided to exclude all the 15m samples from this analysis. 
 rare.nmds<-subset_samples(rare,depth!="15m")
 
 otu.rare<-as.data.frame(otu_table(rare.nmds))
@@ -875,12 +882,7 @@ data.scores$sample = as.factor(envn15$sample)
 data.scores$srange =envn15$srange
 
 
-# Define the color palette for 12 stations
-palette_stations <- c("#332288", "#6699CC", "#88CCEE", "#44AA99", "#117733", "#999933", 
-                      "#DDCC77", "#C18748", "#AF4E24","#830B17", "#E21227","#F47B87")
 
-palette_stations_fill <- c("#332288", "#6699CC", "#88CCEE", "#44AA99", "#117733", "#999933", 
-                           "#F47B87","#E21227","#830B17","#DDCC77", "#C18748", "#AF4E24")#goes in alphabetical order to assign the colors
 
 # Add a new column for conditional fill
 data.scores$fill_color <- ifelse(data.scores$year == "2021",
