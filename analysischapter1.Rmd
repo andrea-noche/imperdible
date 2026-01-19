@@ -372,34 +372,6 @@ anova(lm3)
 emmeans(lm3, pairwise ~ depth)
 emmeans(lm3, pairwise ~ station)
 emmeans(lm3, pairwise ~ depth | station)  # depth differences inside months
-
-```
-
-```{r}
-alpha$year<-as.numeric(alpha$year)
-alpha$station<-as.character(alpha$station)
-alpha$depth<-as.character(alpha$depth)
-
-lm<-lme4::lmer(Shannon~depth+station+(1|year),data=alpha)
-plot(lm)
-summary(lm)
-model_anova2<-aov(lm)
-summary(model_anova2)
-
-tukey<-TukeyHSD(model_anova2)
-tukey
-summary(tukey)
-plot(tukey)
-
-lm<-lm(Observed~depth+station+(1|year),data=alpha)
-plot(lm)
-summary(lm)
-model_anova2<-aov(lm)
-summary(model_anova2)
-
-tukey<-TukeyHSD(model_anova2)
-tukey
-plot(tukey)
 ```
 
 # Top taxa
@@ -1021,27 +993,6 @@ bd
 anova(bd)         # classic ANOVA on distances to centroid
 permutest(bd)     # permutation test (typical for PERMDISP)
 
-
-```
-
-## By years
-
-```{r}
-otu21<-otu[1:45,]
-otuodd<-otu[66,]
-otu21<-rbind(otu21,otuodd)
-
-dannevig.bc.21 <- vegdist(otu21,'bray')  #distance calculation
-
-dannevig.bc.data21<-as.matrix(dannevig.bc.21) #into matrix
-
-env21<-env21d[1:45,]
-env47<-env21d[47,]
-env21<-rbind(env21,env47)
-rm(env47)
-env21<-env21[,8:13]
-
-env21.s<-as.data.frame(scale(env21))
 
 ```
 
