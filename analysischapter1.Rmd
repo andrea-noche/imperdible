@@ -21,6 +21,11 @@ library(ggpubr)
 library(fantaxtic)
 library(ggnested)
 library(ggrepel) #making labelling in plots clearer
+library(Matrix)
+library(lme4)   #for mixed-models
+library(lmerTest)   # gives p-values
+library(emmeans)  
+
 ```
 
 # Getting data ready
@@ -186,9 +191,6 @@ samdf<-sample_data(rare)
 #Bind the sample information with the alpha diversity indexes
 alpha <- cbind(alpha,samdf)
 alpha$sample<-rownames(alpha)
-
-#Saves the alpha diversity calculations as an excel file
-alpha <- write.xlsx(alpha,"D:/dannevig/datafiles/alphadiversity.xlsx" ) #CHANGE directory
 ```
 
 ## Calculate Pielou's index (evenness)
@@ -206,6 +208,9 @@ rm(pielou)
 
 #Rename column
 alpha$Pielou<-alpha$`(alpha$Shannon/log(alpha$Observed))
+
+#Saves the alpha diversity calculations as an excel file
+write.xlsx(alpha_diversity,"D:/dannevig/datafiles/alphadiversity.xlsx" ) #CHANGE directory
 ```
 
 ## Plot the diversity
@@ -332,12 +337,42 @@ e
 ## Model alpha diversity
 
 ```{r}
-model<-lme4::lmer(Shannon~temp+sal+fluo,data=alpha_diversity)
+# Richness
+lm<-lmer(Richness~depth+station+(1|year),data=alpha)
 
-model_anova<-aov(model)
-summary(model_anova)
+plot(lm)
+summary(lm)
 
-tukey.test<-TukeyHSD(model_anova)
+anova(lm)
+
+emmeans(lm, pairwise ~ depth)
+emmeans(lm, pairwise ~ station)
+emmeans(lm, pairwise ~ depth | station)  # depth differences inside months
+
+# Shannon
+lm2<-lmer(Richness~depth+station+(1|year),data=alpha)
+
+plot(lm2)
+summary(lm2)
+
+anova(lm2)
+
+emmeans(lm2, pairwise ~ depth)
+emmeans(lm2, pairwise ~ station)
+emmeans(lm2, pairwise ~ depth | station)  # depth differences inside months
+
+# Pielou
+lm3<-lmer(Evenness~depth+station+(1|year),data=alpha)
+
+plot(lm3)
+summary(lm3)
+
+anova(lm3)
+
+emmeans(lm3, pairwise ~ depth)
+emmeans(lm3, pairwise ~ station)
+emmeans(lm3, pairwise ~ depth | station)  # depth differences inside months
+
 ```
 
 ```{r}
