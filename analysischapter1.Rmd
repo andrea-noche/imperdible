@@ -83,7 +83,8 @@ env <- env %>%
       TRUE ~ NA_character_
     )
   )
-
+# get ready environmental data
+envno15 <- subset(env,depth!="15m")
 ```
 
 ## Filtering singletons
@@ -842,14 +843,6 @@ dev.off()
 ```
 
 ```{r}
-rda.all<-dbrda(d21~.,env21s,dust="bray")
-rda.all
-
-plot(rda.all)
-
-```
-
-```{r}
 envf21<- subset(env21d,station!="Topdalsfjorden")
 envf21<- subset(envf21,station!="Byfjorden")
 envf21<- subset(envf21,station!="Oksøy fyr")
@@ -893,9 +886,6 @@ stressplot(dannevig.mds, main="Shepard plot")
 ```
 ### Get data ready
 ```{r}
-# get ready environmental data
-env <- subset(env,depth!="15m")
-
 fit <- envfit(dannevig.mds, env,na.rm=TRUE)
 
 # create a data frame for using ggplot
@@ -917,26 +907,19 @@ gg <- ggplot(data = data.scores,
                  shape = year
                 )) +
   geom_point(size = 2, stroke = 0.7) +
-
   stat_ellipse(aes(group = depth, color = depth),
                type = "t", size = 0.5) +
-
   geom_text_repel(min.segment.length = Inf,
                   aes(label = station,color="black",fontface="bold"),
                   color = "black", size = 2) +
-
   ## palettes
   scale_color_manual(values = palette_depth_fill) +
-  
   ## shapes (use 21–25 to allow fill)
   scale_shape_manual(values = c(16, 21)) +
-  
   #scale_fill_manual(values = data.scores$fill_color) +
-
   guides(color = guide_legend(title = "Depth"),
          shape = "none",
          fill  = "none") +
-
   theme(
     axis.title = element_text(size = 8, face = "bold", colour = "grey30"),
     panel.background = element_blank(),
@@ -948,7 +931,7 @@ gg <- ggplot(data = data.scores,
 
 gg
 ```
-### save plot
+### Save plot
 ```{r}
 jpeg("D:/plotspaper/nmds11.jpeg", # CHAMGE directory
      width = 2400,
@@ -960,7 +943,7 @@ dev.off()
 ```
 
 # PERMANOVA
-
+### with factors
 ```{r}
 # All dataset
 otu<-otu_table(rare)
@@ -995,44 +978,106 @@ permutest(bd)     # permutation test (typical for PERMDISP)
 
 
 ```
+### with environmental factors
+```{r}
+perm.p <- adonis2(dannevig.bc.data~temp*sal*par*fluo*chla,
+                  data=env,permutations=999)
+
+print(perm.p) 
+```
+
 
 # dbrda
 
 ```{r}
-mod <- dbrda(otu ~ temp + sal + par + dens +fluo , data = env, distance = "bray")
-anova(mod)         # test significance
-anova(mod, by="term")  # test each environmental factor
-plot(mod)
+mod1 <- dbrda(otu ~  temp+sal + par + fluo + dens + chla, 
+             data = env, 
+             distance = "bray",
+             na.action=na.omit)
+vif.cca(mod)
+
+# construct reduced model and calculate VIF
+mod2 <- dbrda(otu ~  temp + sal + par + fluo ,
+             data = env, 
+             distance = "bray",
+             na.action=na.omit)
+vif.cca(mod2)
+
+mod <- dbrda(otu ~  temp + sal + chla + fluo ,
+             data = env, 
+             distance = "bray",
+             na.action=na.omit)
+vif.cca(mod)
+
+# test overall significance of the analysis
+anova(mod2)   
+# test each environmental factor
+anova(mod2, by="term")
+# summary of dbRDA model to extract total variance constrained and axis scores
+summary(mod1)
+RsquareAdj(mod2)
+scores(mod2, display = "bp")
+
+
+env.2 <- subset(env,sample!="O1-0m-21")
+env.2 <- subset(env.2,sample!="O1-Deep-21")
+env.2 <- subset(env.2,sample!="O1-5m-21")
+env.2 <- subset(env.2,sample!="O1-15m-21")
+env.2 <- subset(env.2,sample!="K1-0m-21")
+env.2 <- subset(env.2,sample!="K1-5m-21")
+env.2 <- subset(env.2,sample!="K1-Deep-21")
+env.2 <- subset(env.2,sample!="K1-15m-21")
+env.2 <- subset(env.2,sample!="K1-Deep-22")
 
 # Extract site scores (sample positions)
 sites <- scores(mod, display = "sites") %>% as.data.frame()
-sites$depth <- env$depth   # categorical depth variable in your env data
-sites$year  <- env$year
-sites$station <- env$station
+sites$depth <- as.factor(env.2$depth)   # categorical depth variable in your env data
+sites$year  <- as.factor(env.2$year)
+sites$station <- as.factor(env.2$station)
 # Extract biplot (environmental vectors)
 species <- scores(mod, display = "bp") %>% as.data.frame()
+```
+## Plot dbrda results
+```{r}
 
-jpeg("D:/plotspaper/dbrda3.jpeg",
+palette.rda <- c("#ff8811","#a1c181","#CD1C1C","#46237a")
+  
+gg <- ggplot() +
+  geom_point(data = sites, aes(x = dbRDA1, 
+                               y = dbRDA2, 
+                               color = fct_reorder(depth,env.2$drange), 
+                               shape= year,
+                               label=station), size = 3) +
+  scale_color_manual(values = palette.rda) +
+  scale_shape_manual(values = c(16, 21)) +
+#  stat_ellipse(data = sites, aes(x = dbRDA1, y = dbRDA2), 
+#               geom="polygon", alpha=0.3,level = 0.95) +
+  geom_segment(data = species,
+               aes(x = 0, y = 0, xend = dbRDA1, yend = dbRDA2),
+               arrow = arrow(length = unit(0.3,"cm"),type="open"), color = "blue") +
+  geom_text(data = species,
+            aes(x = dbRDA1, y = dbRDA2, label = rownames(species)),
+            vjust = -0.8, size = 4,color = "blue" ) +
+  geom_text_repel(data = sites,
+                  aes(x = dbRDA1, y = dbRDA2, label = station),
+                  vjust= -0.5,size = 2, show.legend = FALSE) +
+  theme_bw() +
+  guides(color = guide_legend(title = "Depth"),
+         shape = "none") +
+  labs(x = paste0("db-RDA1 (", round(mod$CCA$eig[1] / sum(mod$CCA$eig) * 100, 2), "%)"),
+       y = paste0("db-RDA2 (", round(mod$CCA$eig[2] / sum(mod$CCA$eig) * 100, 2), "%)"))
+gg
+
+```
+
+## Save plot
+```{r}
+jpeg("D:/plotspaper/dbrda6.jpeg", # CHANGE directory
      width = 2400,
      height = 1600,
      res = 400)
+gg
 
-ggplot() +
-  geom_point(data = sites, aes(x = dbRDA1, y = dbRDA2, shape = depth, label=station), size = 1) +
-  stat_ellipse(data = sites, aes(x = dbRDA1, y = dbRDA2, fill = year), 
-               geom="polygon", alpha=0.3,level = 0.95) +
-  geom_segment(data = species,
-               aes(x = 0, y = 0, xend = dbRDA1, yend = dbRDA2),
-               arrow = arrow(length = unit(0.3,"cm"),type="closed"), color = "#730000") +
-  geom_text(data = species,
-            aes(x = dbRDA1, y = dbRDA2, label = rownames(species)),
-            vjust = -0.8, size = 4,color = "#730000" ) +
-  geom_text(data = sites,
-                  aes(x = dbRDA1, y = dbRDA2, label = station),
-                  vjust= -0.5,size = 2, show.legend = FALSE) +
-  theme_minimal() +
-  labs(x = paste0("db-RDA1 (", round(mod$CCA$eig[1] / sum(mod$CCA$eig) * 100, 2), "%)"),
-       y = paste0("db-RDA2 (", round(mod$CCA$eig[2] / sum(mod$CCA$eig) * 100, 2), "%)"))
 dev.off()
-
 ```
+
